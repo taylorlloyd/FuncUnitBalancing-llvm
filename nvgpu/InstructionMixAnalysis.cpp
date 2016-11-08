@@ -27,6 +27,25 @@ namespace llvm {
     Mem,
     Control,
     Pseudo, // Used to indicate no cycle will be used (debug, etc)
+    NumFuncUnits,
+  };
+
+  const char* FuncUnitNames[] {
+    "FP32",
+    "FP64",
+    "Trans",
+    "IntAdd",
+    "IntMul",
+    "Shift",
+    "Bitfield",
+    "Logic",
+    "Warp",
+    "Conv32",
+    "Conv64",
+    "Conv",
+    "Mem",
+    "Control",
+    "Pseudo", // Used to indicate no cycle will be used (debug, etc)
   };
 
   const int sm_35[] = {
@@ -54,6 +73,7 @@ namespace llvm {
 
       void getAnalysisUsage(AnalysisUsage &AU) const override;
       bool runOnFunction(Function &F) override;
+      unsigned long usage[FuncUnit::NumFuncUnits];
     private:
       BlockFrequencyInfo *BFI;
 
@@ -64,6 +84,24 @@ namespace llvm {
 
 bool InstructionMixAnalysis::runOnFunction(Function &F) {
   BFI = &getAnalysis<BlockFrequencyInfoWrapperPass>().getBFI();
+
+  for(int i = 0; i < FuncUnit::NumFuncUnits; i++) {
+    usage[i] = 0;
+  }
+  for(Function::iterator BB = F.begin(), E = F.end(); BB != E; BB++) {
+    BasicBlock *b = &*BB;
+    int freq = BFI->getBlockFreq(b).getFrequency();
+    for(BasicBlock::iterator i = b->begin(), e = b->end(); i !=e; i++) {
+      FuncUnit fu = unitForInst(&*i);
+      usage[fu] += freq;
+    }
+  }
+
+  DEBUG(errs() << F.getName() << "\n");
+  for (int i = 0; i < FuncUnit::NumFuncUnits; i++) {
+    DEBUG(errs() << FuncUnitNames[i] << " " << usage[i] << "\n");
+  }
+  DEBUG(errs() << "\n");
 
   return false;
 }

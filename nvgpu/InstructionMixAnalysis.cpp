@@ -113,6 +113,7 @@ FuncUnit InstructionMixAnalysis::unitForInst(Instruction *i) {
         case BinaryOperator::Shl:
         case BinaryOperator::AShr:
         case BinaryOperator::LShr:
+          return FuncUnit::Shift;
         default:
           DEBUG(errs() << "Unrecognized BinaryOp "; BO->dump());
           return FuncUnit::Pseudo;
@@ -123,6 +124,30 @@ FuncUnit InstructionMixAnalysis::unitForInst(Instruction *i) {
   // Handle Comparisons
   if(auto CMP=dyn_cast<CmpInst>(i)) {
     return FuncUnit::Logic;
+  }
+
+  // Handle memory operations
+  if(dyn_cast<LoadInst>(i) || dyn_cast<StoreInst>(i)) {
+    return FuncUnit::Mem;
+  }
+
+  // Handle control flow operations (branch, return, etc.)
+  if(dyn_cast<TerminatorInst>(i)) {
+    return FuncUnit::Control;
+  }
+
+  //TODO: Figure out what to do with getelementptr, call and alloca
+  if(dyn_cast<GetElementPtrInst>(i)) {
+    return FuncUnit::Pseudo;
+  }
+  if(dyn_cast<CallInst>(i)) {
+    return FuncUnit::Pseudo;
+  }
+  if(dyn_cast<AllocaInst>(i)) {
+    return FuncUnit::Pseudo;
+  }
+  if(isa<PHINode>(i)) {
+    return FuncUnit::Pseudo;
   }
 
   //TODO: handle NVidia libdevice calls

@@ -6,9 +6,12 @@
 
 #include "llvm/IR/Instructions.h"
 
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+
 using namespace llvm;
 
-#define DEBUG_TYPE "instcombine"
+#define DEBUG_TYPE "instmix"
 
 namespace llvm {
   enum FuncUnit {
@@ -198,3 +201,8 @@ char InstructionMixAnalysis::ID = 0;
 static RegisterPass<InstructionMixAnalysis> X("gpumix", "Reports estimated instruction mixes for GPU functions",
                                         false,
                                         true);
+
+static void registerMyPass(const PassManagerBuilder &, legacy::PassManagerBase &PM) {
+  PM.add(new InstructionMixAnalysis());
+}
+static RegisterStandardPasses RegisterMyPass(PassManagerBuilder::EP_OptimizerLast, registerMyPass);

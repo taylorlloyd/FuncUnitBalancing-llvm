@@ -23,9 +23,15 @@ bool BalanceFunctionalUnits::runOnFunction(Function &F) {
   BFI = &getAnalysis<BlockFrequencyInfoWrapperPass>().getBFI();
   bool changed = false;
 
-  while (Transformation *tsfm = selectNextTransformation(F)) {
+  while (true) {
+    pair<Transformation*, Instruction*> next = selectNextTransformation(F, usage);
+    Transformation *tsfm = get<0>(next);
+    Instruction *inst = get<1>(next);
+    if (tsfm == nullptr) {
+      break;
+    }
     tsfm->applyTransformation();
-    usage = transformationEffect(tsfm, usage);
+    usage = transformationEffect(tsfm, inst, usage);
     changed = true;
   }
 
@@ -38,28 +44,36 @@ void BalanceFunctionalUnits::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesCFG();
 }
 
-Transformation* BalanceFunctionalUnits::selectNextTransformation(Function &F) {
+pair<Transformation*, Instruction*> BalanceFunctionalUnits::selectNextTransformation(Function &F, array<unsigned long, FuncUnit::NumFuncUnits> usage) {
   vector<pair<Transformation*, Instruction*> > candidates;
+  Transformation *bestTransformation = nullptr;
+  Instruction *bestInstruction = nullptr;
+  float minOveruseRate = overuseRateThreshold;
+
   for (vector<Transformation*>::iterator tsfm = transformations.begin(); tsfm != transformations.end(); tsfm++) {
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
       if ((*tsfm)->canTransform(&*I)) {
+        array<unsigned long, FuncUnit::NumFuncUnits> transformedUsage = transformationEffect(*tsfm, &*I, usage);
+        float overuse = overuseRate(transformedUsage);
+        if (overuse < minOveruseRate) {
+          minOveruseRate = overuse;
+          bestTransformation = *tsfm;
+          bestInstruction = &*I;
+        }
         candidates.push_back(make_pair(*tsfm, &*I));
       }
     }
-    (*tsfm)->applyTransformation();
   }
-  //TODO: get pair with minimum overuserate
 
-  return nullptr;
+  return make_pair(bestTransformation, bestInstruction);
 }
 
-array<unsigned long, FuncUnit::NumFuncUnits> BalanceFunctionalUnits::transformationEffect(Transformation *tsfm, array<unsigned long, FuncUnit::NumFuncUnits> usage) {
-  array<unsigned long, FuncUnit::NumFuncUnits> transformationedUsage;
+array<unsigned long, FuncUnit::NumFuncUnits> BalanceFunctionalUnits::transformationEffect(Transformation *tsfm, Instruction *I, array<unsigned long, FuncUnit::NumFuncUnits> usage) {
+  array<unsigned long, FuncUnit::NumFuncUnits> transformedUsage;
   for (int fu = 0; fu < FuncUnit::NumFuncUnits; fu++) {
-    //TODO: complete expression
-    transformationedUsage[fu] = usage[fu];
+    transformedUsage[fu] = usage[fu] + tsfm->usageChange[fu] * BFI->getBlockFreq(I->getParent()).getFrequency();
   }
-  return transformationedUsage;
+  return transformedUsage;
 }
 
 float BalanceFunctionalUnits::overuseRate(array<unsigned long, FuncUnit::NumFuncUnits> usage) {
@@ -69,9 +83,10 @@ float BalanceFunctionalUnits::overuseRate(array<unsigned long, FuncUnit::NumFunc
   }
 
   float overuse = 0;
-  for (int fu = 0; fu < FuncUnit::NumFuncUnits; fu++) {
+  // The -1 is because Pseudo instructions have no functional units
+  for (int fu = 0; fu < FuncUnit::NumFuncUnits - 1; fu++) {
     if (usage[fu]/usageTotal > sm_35[fu]/256) {
-      overuse += (usage[fu]/usageTotal) / (sm_35[fu]/256);
+      overuse += (usage[fu]/usageTotal) / (sm_35[fu]/256.0);
     }
   }
 

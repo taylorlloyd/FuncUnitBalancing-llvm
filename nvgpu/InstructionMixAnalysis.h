@@ -1,6 +1,14 @@
 #ifndef INSTRUCTION_MIX_ANALYSIS_H
 #define INSTRUCTION_MIX_ANALYSIS_H
+
 #include "llvm/Analysis/BlockFrequencyInfo.h"
+#include "llvm/Analysis/LoopPass.h"
+
+#include <array>
+#include <vector>
+
+using namespace std;
+
 namespace llvm {
   enum FuncUnit {
     FP32,
@@ -56,20 +64,23 @@ namespace llvm {
    256  // Control
   };
 
-  class InstructionMixAnalysis : public FunctionPass {
+  class InstructionMixAnalysis : public LoopPass {
     public:
       static char ID;
 
-      InstructionMixAnalysis() : FunctionPass(ID) {}
+      InstructionMixAnalysis() : LoopPass(ID) {}
 
       void getAnalysisUsage(AnalysisUsage &AU) const override;
-      bool runOnFunction(Function &F) override;
-      std::array<unsigned long, FuncUnit::NumFuncUnits> const &getUsage() const { return usage; }
+      bool runOnLoop(Loop *l, LPPassManager &LPM) override;
+      array<unsigned long, FuncUnit::NumFuncUnits> const &getUsage() const { return usage; }
     private:
-      BlockFrequencyInfo *BFI;
-      std::array<unsigned long, FuncUnit::NumFuncUnits> usage;
+      array<unsigned long, FuncUnit::NumFuncUnits> usage;
 
-      FuncUnit unitForInst(Instruction *i);
+      vector<FuncUnit> unitForInst(Instruction *i);
+      bool canFuseMultAdd(BinaryOperator *add);
+      bool canBitfieldExtract(BinaryOperator *andi);
+      void pushInstructionsForCall(CallInst* CI, vector<FuncUnit> units);
+      void pushInstructionsForGEP(GetElementPtrInst* GEP, vector<FuncUnit> units);
   };
 
 } // end namespace

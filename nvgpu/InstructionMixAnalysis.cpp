@@ -17,7 +17,7 @@ using namespace std;
 #define DEBUG_TYPE "instmix"
 
 bool InstructionMixAnalysis::runOnLoop(Loop *L, LPPassManager &LPM) {
-  if(L->getBlocks().size() > 1)
+  if(L->getSubLoops().size() > 0)
     return false; // Abort, not an innermost loop
 
   // Zero-initialize usage

@@ -10,6 +10,8 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
+#include "llvm/IR/IRBuilder.h"
+
 #include "InstructionMixAnalysis.h"
 #include "BalanceFunctionalUnits.h"
 
@@ -18,19 +20,22 @@ using namespace std;
 
 #define DEBUG_TYPE "fu-balance"
 
-bool BalanceFunctionalUnits::runOnFunction(Function &F) {
+bool BalanceFunctionalUnits::runOnLoop(Loop *L, LPPassManager &LPM) {
+  if(L->getSubLoops().size() > 0)
+    return false; // Abort, not an innermost loop
+
   array<unsigned long, FuncUnit::NumFuncUnits> usage = getAnalysis<InstructionMixAnalysis>().getUsage();
   BFI = &getAnalysis<BlockFrequencyInfoWrapperPass>().getBFI();
   bool changed = false;
 
   while (true) {
-    pair<Transformation*, Instruction*> next = selectNextTransformation(F, usage);
+    pair<Transformation*, Instruction*> next = selectNextTransformation(L, usage);
     Transformation *tsfm = get<0>(next);
     Instruction *inst = get<1>(next);
     if (tsfm == nullptr) {
       break;
     }
-    tsfm->applyTransformation();
+    tsfm->applyTransformation(inst);
     usage = transformationEffect(tsfm, inst, usage);
     changed = true;
   }
@@ -44,23 +49,26 @@ void BalanceFunctionalUnits::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesCFG();
 }
 
-pair<Transformation*, Instruction*> BalanceFunctionalUnits::selectNextTransformation(Function &F, array<unsigned long, FuncUnit::NumFuncUnits> usage) {
+pair<Transformation*, Instruction*> BalanceFunctionalUnits::selectNextTransformation(Loop *L, array<unsigned long, FuncUnit::NumFuncUnits> usage) {
   vector<pair<Transformation*, Instruction*> > candidates;
   Transformation *bestTransformation = nullptr;
   Instruction *bestInstruction = nullptr;
   float minOveruseRate = overuseRateThreshold;
 
   for (vector<Transformation*>::iterator tsfm = transformations.begin(); tsfm != transformations.end(); tsfm++) {
-    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-      if ((*tsfm)->canTransform(&*I)) {
-        array<unsigned long, FuncUnit::NumFuncUnits> transformedUsage = transformationEffect(*tsfm, &*I, usage);
-        float overuse = overuseRate(transformedUsage);
-        if (overuse < minOveruseRate) {
-          minOveruseRate = overuse;
-          bestTransformation = *tsfm;
-          bestInstruction = &*I;
+    for(Loop::block_iterator block = L->block_begin(), blockEnd = L->block_end(); block!= blockEnd; ++block) {
+      BasicBlock *B = *block;
+      for(BasicBlock::iterator I = B->begin(), E = B->end(); I !=E; I++) {
+        if ((*tsfm)->canTransform(&*I)) {
+          array<unsigned long, FuncUnit::NumFuncUnits> transformedUsage = transformationEffect(*tsfm, &*I, usage);
+          float overuse = overuseRate(transformedUsage);
+          if (overuse < minOveruseRate) {
+            minOveruseRate = overuse;
+            bestTransformation = *tsfm;
+            bestInstruction = &*I;
+          }
+          candidates.push_back(make_pair(*tsfm, &*I));
         }
-        candidates.push_back(make_pair(*tsfm, &*I));
       }
     }
   }

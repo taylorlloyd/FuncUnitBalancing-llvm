@@ -13,6 +13,7 @@
 #include "llvm/IR/IRBuilder.h"
 
 #include "InstructionMixAnalysis.h"
+#include "Transformations.h"
 #include "BalanceFunctionalUnits.h"
 
 using namespace llvm;

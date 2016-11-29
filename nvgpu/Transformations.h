@@ -28,5 +28,13 @@ namespace llvm {
       void applyTransformation(Instruction *I) override;
       bool canTransform(Instruction *I) override;
   };
+
+  class MulToShl : public Transformation{
+    public:
+      MulToShl();
+      void applyTransformation(Instruction *I) override;
+      bool canTransform(Instruction *I) override;
+  };
+
 }
 #endif

@@ -54,7 +54,7 @@ pair<Transformation*, Instruction*> BalanceFunctionalUnits::selectNextTransforma
   vector<pair<Transformation*, Instruction*> > candidates;
   Transformation *bestTransformation = nullptr;
   Instruction *bestInstruction = nullptr;
-  float minOveruseRate = overuseRateThreshold;
+  float minOveruseRate = fmin(overuseRateThreshold, overuseRate(usage));
 
   for (vector<Transformation*>::iterator tsfm = transformations.begin(); tsfm != transformations.end(); tsfm++) {
     for(Loop::block_iterator block = L->block_begin(), blockEnd = L->block_end(); block!= blockEnd; ++block) {

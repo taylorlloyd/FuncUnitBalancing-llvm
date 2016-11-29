@@ -5,6 +5,8 @@
 #include "InstructionMixAnalysis.h"
 #include "Transformations.h"
 
+#include <cmath>
+
 using namespace llvm;
 
 /**** ShlToMul ****/
@@ -57,5 +59,45 @@ void ShrToDiv::applyTransformation(Instruction *I) {
 bool ShrToDiv::canTransform(Instruction *I) {
   if (dyn_cast<AShrOperator>(I) || dyn_cast<LShrOperator>(I))
     return true;
+  return false;
+}
+
+/**** MulToShl ****/
+MulToShl::MulToShl() : Transformation() {
+  usageChange[FuncUnit::Shift] = 1;
+  usageChange[FuncUnit::IntMul] = -1;
+}
+
+void MulToShl::applyTransformation(Instruction *I) {
+
+    IRBuilder<> builder(I);
+    Value *op1 = I->getOperand(0);
+    ConstantInt *op2 = dyn_cast<ConstantInt>(I->getOperand(1));
+    int64_t op2Value = op2->getSExtValue();
+    bool hasNUW = I->hasNoUnsignedWrap();
+    bool hasNSW = I->hasNoSignedWrap();
+
+    Value *op2New = ConstantInt::get(op2->getType(), log2(op2Value));
+
+    Value *shl = builder.CreateShl(op1, op2New, "", hasNUW, hasNSW);
+
+    for (auto &U : I->uses()) {
+      User *user = U.getUser();
+      user->setOperand(U.getOperandNo(), shl);
+    }
+
+    I->eraseFromParent();
+  };
+
+bool MulToShl::canTransform(Instruction *I) {
+  if (I->getOpcode() == BinaryOperator::Mul) {
+    /* Check if operand is constant and power of two */
+    if (ConstantInt *op = dyn_cast<ConstantInt>(I->getOperand(1))) {
+      int64_t opValue = op->getSExtValue();
+      if (!(opValue & (opValue -1))) {
+        return true;
+      }
+    }
+  }
   return false;
 }

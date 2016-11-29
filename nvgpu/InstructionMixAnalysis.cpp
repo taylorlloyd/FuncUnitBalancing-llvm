@@ -62,7 +62,15 @@ bool InstructionMixAnalysis::runOnLoop(Loop *L, LPPassManager &LPM) {
     usage[i] = 0;
   }
 
-
+  for(Loop::block_iterator block = L->block_begin(), blockEnd = L->block_end(); block!= blockEnd; ++block) {
+    BasicBlock *B = *block;
+    for(BasicBlock::iterator I = B->begin(), E = B->end(); I !=E; I++) {
+      vector<FuncUnit> freq = unitForInst(&*I);
+	  for (FuncUnit fu : freq) {
+		usage[fu]++;
+	  }
+	}
+  }
 
   for (int i = 0; i < FuncUnit::NumFuncUnits; i++) {
     DEBUG(errs() << FuncUnitNames[i] << " " << usage[i] << "\n");

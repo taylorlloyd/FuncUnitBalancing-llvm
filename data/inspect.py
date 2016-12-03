@@ -11,29 +11,29 @@ def relativeFreq(data):
   fp64 = float(data["FP Instructions(Double)"])
   trans = float(data["Floating Point Operations(Single Precision Special)"])
   intops = float(data["Integer Instructions"])
-  shift = float(data["Bit-Convert Instructions"])
+  conv = float(data["Bit-Convert Instructions"])
   warp = float(data["Inter-Thread Instructions"])
   logic = float(data["Control-Flow Instructions"])
-  conv = float(data["Misc Instructions"])
+  misc = float(data["Misc Instructions"])
 
-  total = fp32 + fp64 + trans + intops + shift + warp + logic + conv
+  total = fp32 + fp64 + trans + intops + conv + warp + logic + misc
   fp32 = fp32/total
   fp64 = fp64/total
   trans = trans/total
   intops = intops/total
-  shift = shift/total
+  conv = conv/total
   warp = warp/total
   logic = logic/total
-  conv = conv/total
+  misc = misc/total
 
   print("FP32: " + str(fp32))
   print("FP64: " + str(fp64))
   print("Trans: " + str(trans))
   print("IntOps: " + str(intops))
-  print("Shift: " + str(shift))
+  print("Conv: " + str(conv))
   print("Warp: " + str(warp))
   print("Logic: " + str(logic))
-  print("Conv: " + str(conv))
+  print("Misc: " + str(misc))
 
 with open(sys.argv[1]) as f:
   csvf = list(csv.reader(f, delimiter=',', quotechar="\""))

@@ -36,5 +36,13 @@ namespace llvm {
       bool canTransform(Instruction *I) override;
   };
 
+
+  class Cvt32ToCvt64 : public Transformation{
+    public:
+      Cvt32ToCvt64();
+      void applyTransformation(Instruction *I) override;
+      bool canTransform(Instruction *I) override;
+  };
+
 }
 #endif

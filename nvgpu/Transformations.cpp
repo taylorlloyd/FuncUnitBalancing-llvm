@@ -111,57 +111,80 @@ Cvt32ToCvt64::Cvt32ToCvt64() : Transformation() {
 }
 
 void Cvt32ToCvt64::applyTransformation(Instruction *I) {
-  //errs() << "Starting to apply Cvt\n       " << *I << "\n";
-  CastInst *op1 = dyn_cast<CastInst>(I->getOperand(0));
-  CastInst *op2 = dyn_cast<CastInst>(I->getOperand(1));
 
-  //errs() << "  op1: " << *op1 << "\n";
-  //errs() << "  op2: " << *op2 << "\n";
+  // Preconditions
+  assert(I->getType()->isFloatTy());
+  assert(isa<BinaryOperator>(I));
 
   LLVMContext& ctx = I->getContext();
+  BinaryOperator *BO = dyn_cast<BinaryOperator>(I);
+  vector<Instruction *> rm;
 
-  /* Replace cast1 */
-  IRBuilder<> builderOp1(op1);
-  bool isSigned = (op1->getOpcode() == Instruction::SExt) || (op1->getOpcode() == Instruction::SIToFP);
-  Instruction::CastOps opcode = CastInst::getCastOpcode(op1->getOperand(0), isSigned, op1->getDestTy(), true);
-  Value *newOp1 = builderOp1.CreateCast(opcode, op1->getOperand(0), Type::getDoubleTy(ctx), "");
-  for (auto &U : op1->uses()) {
-    User *user = U.getUser();
-    user->setOperand(U.getOperandNo(), newOp1);
+  // Collect our intermediate and target types
+  Type *fTy = I->getType();
+  Type *dTy = Type::getDoubleTy(ctx);
+
+  // Collect our operands
+  Value *op1 = I->getOperand(0);
+  Value *op2 = I->getOperand(1);
+
+  Instruction::CastOps co1 = Instruction::CastOps::FPExt;
+  Instruction::CastOps co2 = Instruction::CastOps::FPExt;
+
+  // Drop unnecessary casts
+  if(auto c1 = dyn_cast<CastInst>(op1)) {
+    if(auto op = CastInst::isEliminableCastPair(
+                                      c1->getOpcode(),
+                                      CastInst::FPExt,
+                                      c1->getSrcTy(),
+                                      c1->getDestTy(),
+                                      dTy,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr)) {
+      op1=c1->getOperand(0);
+      co1=(Instruction::CastOps) op;
+      if(c1->getNumUses() > 1)
+        rm.push_back(c1);
+    }
   }
-  op1->eraseFromParent();
-
-  /* Replace cast2 */
-  IRBuilder<> builderOp2(op2);
-  isSigned = (op2->getOpcode() == Instruction::SExt) || (op2->getOpcode() == Instruction::SIToFP);
-  opcode = CastInst::getCastOpcode(op2->getOperand(0), isSigned, op2->getDestTy(), true);
-  Value *newOp2 = builderOp2.CreateCast(opcode, op2->getOperand(0), Type::getDoubleTy(ctx), "");
-  for (auto &U : op2->uses()) {
-    User *user = U.getUser();
-    user->setOperand(U.getOperandNo(), newOp2);
-  }
-  op2->eraseFromParent();
-
-  /* Replace the instruction */
-  IRBuilder<> builder(I);
-  Instruction *CI = builder.Insert(I->clone());
-  I->replaceAllUsesWith(CI);
-
-  /* Convert back to float */
-  Value *trunc = builder.CreateFPTrunc(CI, Type::getFloatTy(ctx), "");
-  for (auto &U : CI->uses()) {
-    User *user = U.getUser();
-    if (dyn_cast<Value>(user) != trunc && !dyn_cast<CastInst>(user)) {
-      user->setOperand(U.getOperandNo(), trunc);
+  if(auto c2 = dyn_cast<CastInst>(op2)) {
+    if(auto op = CastInst::isEliminableCastPair(
+                                      c2->getOpcode(),
+                                      CastInst::FPExt,
+                                      c2->getSrcTy(),
+                                      c2->getDestTy(),
+                                      dTy,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr)) {
+      op2=c2->getOperand(0);
+      co2=(Instruction::CastOps) op;
+      if(c2->getNumUses() > 1)
+        rm.push_back(c2);
     }
   }
 
-  I->eraseFromParent();
+  Instruction* newOp1 = CastInst::Create(co1, op1, dTy, "up_op1", I);
+  Instruction* newOp2 = CastInst::Create(co2, op2, dTy, "up_op2", I);
+
+  Instruction *newI = BinaryOperator::Create(BO->getOpcode(), newOp1, newOp2, "up_fp", I);
+
+  Instruction *repl = CastInst::CreateFPCast(newI, fTy, "down_fp", I);
+
+  I->replaceAllUsesWith(repl);
+  rm.push_back(I);
+
+  while(!rm.empty()) {
+    Instruction *i = rm.back();
+    i->eraseFromParent();
+    rm.pop_back();
+  }
 };
 
 bool Cvt32ToCvt64::canTransform(Instruction *I) {
   /* Is it an operation? */
-  if (!dyn_cast<BinaryOperator>(I)){
+  if (!isa<BinaryOperator>(I)){
     return false;
   }
 
@@ -178,17 +201,6 @@ bool Cvt32ToCvt64::canTransform(Instruction *I) {
   if (!to1->isFloatTy() || !to2->isFloatTy()) {
     return false;
   }
-
-  /* Are they converting from integers (32 bits or less)? */
-  Type *from1 = op1->getOperand(0)->getType();
-  Type *from2 = op2->getOperand(0)->getType();
-  if (from1->isDoubleTy() || (from1->isIntegerTy() && from1->getIntegerBitWidth() > 32) ||
-      from2->isDoubleTy() || (from2->isIntegerTy() && from2->getIntegerBitWidth() > 32))
-    return false;
-
-  /* Is the result used only once? */
-  if (I->getNumUses() > 1)
-    return false;
 
   /* Are the casts used only once? */
   if (op1->getNumUses() > 1 || op2->getNumUses() > 1)

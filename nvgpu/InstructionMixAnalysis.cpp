@@ -54,6 +54,7 @@ namespace llvm {
 }
 
 bool InstructionMixAnalysis::runOnLoop(Loop *L, LPPassManager &LPM) {
+  errs() << "HELLO WORLD!!!! Fuck yeah.\n";
   if(L->getSubLoops().size() > 0)
     return false; // Abort, not an innermost loop
 
@@ -66,10 +67,10 @@ bool InstructionMixAnalysis::runOnLoop(Loop *L, LPPassManager &LPM) {
     BasicBlock *B = *block;
     for(BasicBlock::iterator I = B->begin(), E = B->end(); I !=E; I++) {
       vector<FuncUnit> freq = unitForInst(&*I);
-	  for (FuncUnit fu : freq) {
-		usage[fu]++;
+      for (FuncUnit fu : freq) {
+        usage[fu]++;
+      }
 	  }
-	}
   }
 
   for (int i = 0; i < FuncUnit::NumFuncUnits; i++) {
@@ -180,8 +181,6 @@ vector<FuncUnit> InstructionMixAnalysis::unitForInst(Instruction *i) {
     return ret;
   }
 
-  //TODO: handle NVidia libdevice calls
-
   DEBUG(errs() << "Unrecognized Instruction "; i->dump());
   return ret;
 }
@@ -220,7 +219,11 @@ bool InstructionMixAnalysis::canBitfieldExtract(BinaryOperator *andi) {
   return true;
 }
 
-void InstructionMixAnalysis::pushInstructionsForCall(CallInst* CI, vector<FuncUnit> units) {
+void InstructionMixAnalysis::pushInstructionsForGEP(GetElementPtrInst* GEP, vector<FuncUnit>& units) {
+  units.push_back(FuncUnit::IntMul); // most GEPs are expressible as an IMAD
+}
+
+void InstructionMixAnalysis::pushInstructionsForCall(CallInst* CI, vector<FuncUnit>& units) {
   Function *F = CI->getFunction();
 
   if(!F)
@@ -388,12 +391,29 @@ void InstructionMixAnalysis::pushInstructionsForCall(CallInst* CI, vector<FuncUn
   }
 }
 
+double InstructionMixAnalysis::getOveruseRate(array<unsigned long, FuncUnit::NumFuncUnits>& usage) {
+  long total = 0;
+  for(int i = 0; i < FuncUnit::NumFuncUnits; i++) {
+    total += usage[i];
+  }
+
+  double overuseRate = 0.0;
+  for(int i = 0; i < FuncUnit::NumFuncUnits; i++) {
+    double observed = usage[i]/total;
+    double ideal = sm_35[i]/256;
+    if(observed > ideal)
+      overuseRate += observed/ideal;
+  }
+
+  return overuseRate;
+}
+
 char InstructionMixAnalysis::ID = 0;
 static RegisterPass<InstructionMixAnalysis> X("gpumix", "Reports estimated instruction mixes for GPU loops",
                                         false,
                                         true);
 
-static void registerMyPass(const PassManagerBuilder &, legacy::PassManagerBase &PM) {
+static void registerIMix(const PassManagerBuilder &, legacy::PassManagerBase &PM) {
   PM.add(new InstructionMixAnalysis());
 }
-static RegisterStandardPasses RegisterMyPass(PassManagerBuilder::EP_OptimizerLast, registerMyPass);
+static RegisterStandardPasses RegisterMyPass(PassManagerBuilder::EP_OptimizerLast, registerIMix);

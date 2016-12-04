@@ -38,6 +38,11 @@ namespace llvm {
 
       InstructionMixAnalysis() : LoopPass(ID) {}
 
+      /**
+       * Returns the rate of overuse
+       */
+      double getOveruseRate(array<unsigned long, FuncUnit::NumFuncUnits>& usage);
+
       void getAnalysisUsage(AnalysisUsage &AU) const override;
       bool runOnLoop(Loop *l, LPPassManager &LPM) override;
       array<unsigned long, FuncUnit::NumFuncUnits> const &getUsage() const { return usage; }
@@ -47,9 +52,8 @@ namespace llvm {
       vector<FuncUnit> unitForInst(Instruction *i);
       bool canFuseMultAdd(BinaryOperator *add);
       bool canBitfieldExtract(BinaryOperator *andi);
-      void pushInstructionsForCall(CallInst* CI, vector<FuncUnit> units);
-      void pushInstructionsForGEP(GetElementPtrInst* GEP, vector<FuncUnit> units);
+      void pushInstructionsForCall(CallInst* CI, vector<FuncUnit>& units);
+      void pushInstructionsForGEP(GetElementPtrInst* GEP, vector<FuncUnit>& units);
   };
-
 } // end namespace
 #endif

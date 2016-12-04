@@ -1,0 +1,5 @@
+#!/bin/bash
+CLANG="clang"
+CLANGFLAGS="/usr/local/cuda/lib64/libcudart.so --cuda-gpu-arch=sm_35"
+LOADOPTS="-O3 -Xclang -load -Xclang ../nvgpu/libGPUInstMix.so"
+$CLANG $CLANGFLAGS $LOADOPTS $@

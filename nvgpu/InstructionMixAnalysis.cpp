@@ -54,7 +54,6 @@ namespace llvm {
 }
 
 bool InstructionMixAnalysis::runOnLoop(Loop *L, LPPassManager &LPM) {
-  errs() << "HELLO WORLD!!!! Fuck yeah.\n";
   if(L->getSubLoops().size() > 0)
     return false; // Abort, not an innermost loop
 
